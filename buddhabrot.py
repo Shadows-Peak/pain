@@ -1,14 +1,15 @@
 import numpy as np
-import cmath, math
+import math
+from rtree import index
 from PIL import Image
 
 catch_distance = 10
 pointEvals = 30
-num_points = 5000
+num_points = 200000000 # Recommended to be higher than the number of pixels
 dimensions = 2
 
-precision = 1000 # Subdivide each side into this many segments for pixels
-resolution = [2000,1000]
+precision = 10000 # Subdivide each side into this many segments for pixels
+resolution = [10000,10000]
 
 # Define the range for each dimension
 x_min, x_max = -2, 1
@@ -23,8 +24,12 @@ random_points = np.column_stack((x_coords, y_coords))
 
 
 
+pointLength = len(random_points)
+
 escapedPoints = []
 allPointLocations = []
+
+print("Calculating points...")
 
 for point in random_points:
     pointLocations = []
@@ -42,8 +47,11 @@ for point in random_points:
             allPointLocations += pointLocations
             break
         pointLocations.append(zNext)
+    if len(allPointLocations) % (pointLength // 100) == 0 and len(allPointLocations) != 0:
+        print(f"Point calculations: {int((len(allPointLocations) / (pointLength * pointEvals)) * 100)}% done")
 
-print(allPointLocations)
+print("Done calculating points.")
+#print(allPointLocations)
 
 xs = [z.real for z in allPointLocations]
 ys = [z.imag for z in allPointLocations]
@@ -81,10 +89,17 @@ y_ranges = [
 #print("X ranges: ", x_ranges)
 #print("Y ranges: ", y_ranges)
 
+print("Creating spatial index...")
+idx = index.Index()
+for i, point in enumerate(allPointLocations):
+    idx.insert(i, (point.real, point.imag, point.real, point.imag))
+    # Print percent done every 1%
+    if len(allPointLocations) > 0 and i % (len(allPointLocations) // 100) == 0:
+        print(f"Spatial index: {int((i / len(allPointLocations)) * 100)}% done")
+print("Done creating spatial index.")
+
 def filter_complex_points(points, x_range, y_range):
-    arr = np.array(points, dtype=np.complex128)
-    mask = (arr.real >= x_range[0]) & (arr.real <= x_range[1]) & (arr.imag >= y_range[0]) & (arr.imag <= y_range[1])
-    return np.count_nonzero(mask)
+    return sum(1 for _ in idx.intersection((x_range[0], y_range[0], x_range[1], y_range[1])))
 
 checks = len(allPointLocations)
 full = resolution[0] * resolution[1]
@@ -145,4 +160,5 @@ for (x, y), count in locationAndCount.items():
     img.putpixel((x, y), (brightnessIndex, brightnessIndex, brightnessIndex))
 
 print("Complete!")
-img.save("buddhabrot.png")
+rotated_img = img.transpose(Image.ROTATE_270)
+rotated_img.save("buddhabrot.png")
